@@ -1,72 +1,62 @@
-#include <errno.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <errno.h>
+#include <stdio.h>
+#include <string.h>
 #include <unistd.h>
-#include <fcntl.h>
+#include <stdlib.h>
 
 #include "tcp.h"
 
-int lookup(char *host, char *portnr, struct addrinfo **res)
+#define incopy(a)       *((struct in_addr *)a)
+
+int connect_to(char *host, int portnr)
 {
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_NUMERICSERV;
-    hints.ai_protocol = 0;
+        int     fd;
+        int     loop;
+        struct sockaddr_in      addr;
+        struct hostent  *hostdnsentries;
 
-    return getaddrinfo(host, portnr, &hints, res);
-}
-
-int connect_to(struct addrinfo *addr, struct timeval *rtt)
-{
-    int fd;
-    struct timeval start;
-    int connect_result;
-    const int on = 1;
-    /* int flags; */
-    int rv = 0;
-
-    /* try to connect for each of the entries: */
-    while (addr != NULL)
-    {
         /* create socket */
-        if ((fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol)) == -1)
-            goto next_addr0;
-        if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
-            goto next_addr1;
-#if 0
-        if ((flags = fcntl(fd, F_GETFL, 0)) == -1)
-            goto next_addr1;
-        if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
-            goto next_addr1;
-#endif
-        if (gettimeofday(&start, NULL) == -1)
-            goto next_addr1;
-
-        /* connect to peer */
-        if ((connect_result = connect(fd, addr->ai_addr, addr->ai_addrlen)) == 0)
+        fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (fd == -1)
         {
-            if (gettimeofday(rtt, NULL) == -1)
-                goto next_addr1;
-            rtt->tv_sec = rtt->tv_sec - start.tv_sec;
-            rtt->tv_usec = rtt->tv_usec - start.tv_usec;
-            close(fd);
-            return 0;
+                perror("problem creating socket ");
+                exit(2);
         }
 
-next_addr1:
-        close(fd);
-next_addr0:
-        addr = addr->ai_next;
-    }
+        hostdnsentries = gethostbyname(host);
+        if (hostdnsentries == NULL)
+        {
+                fprintf(stderr, "could not resolve %s:%d: %s\n", host, portnr, strerror(errno));
+                close(fd);
+                exit(2);
+        }
 
-    rv = rv ? rv : -errno;
-    return rv;
+        /* initialize address structure */
+        memset((void *)&addr, 0, sizeof(addr));
+        addr.sin_port   = htons(portnr);
+        addr.sin_family = hostdnsentries -> h_addrtype;
+
+        /* try to connect for each of the entries: */
+        for(loop=0; ; loop++)
+        {
+                if ((hostdnsentries -> h_addr_list[loop]) == NULL)
+                        break;
+
+                addr.sin_addr = incopy(hostdnsentries -> h_addr_list[loop]);
+
+                /* connect to peer */
+                if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0)
+                {
+                        /* connection made, return */
+                        return fd;
+                }
+        }
+
+        close(fd);
+
+        return -1;
 }

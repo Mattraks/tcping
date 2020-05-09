@@ -5,19 +5,19 @@ make install
 
 Usage:
 -----
-tcping hostname
+tcping -h hostname
 (uses port 80) or
-tcping -p port hostname
+tcping -h hostname -p port
 
 ping once:
-tcping -p port -c 1 hostname
+tcping -h host -p port -c 1
 
-tcping returns:
-0 on success
+tcping Return code:
+0 means can connect (at least once)
 2 if the host or service could not be resolved
-127 on other errors
+127 means unable to connect at all
 
 examples:
-tcping -p 8080 127.0.0.1
+tcping -h 127.0.0.1 -p 8080
 
 Please support my opensource development: http://www.vanheusden.com/wishlist.php

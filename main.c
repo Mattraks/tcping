@@ -6,148 +6,146 @@
 #include <unistd.h>
 #include <sys/time.h>
 
+#include "io.h"
 #include "tcp.h"
-
-#define abs(x) ((x) < 0 ? -(x) : (x))
 
 static volatile int stop = 0;
 
 void usage(void)
 {
-    fprintf(stderr, "tcping, (C) 2003 folkert@vanheusden.com\n\n");
-    fprintf(stderr, "hostname	hostname (e.g. localhost)\n");
-    fprintf(stderr, "-p portnr	portnumber (e.g. 80)\n");
-    fprintf(stderr, "-c count	how many times to connect\n");
-    fprintf(stderr, "-i interval	delay between each connect\n");
-    fprintf(stderr, "-f		flood connect (no delays)\n");
-    fprintf(stderr, "-q		quiet, only returncode\n\n");
+	fprintf(stderr, "tcping, (C) 2003 folkert@vanheusden.com\n\n");
+	fprintf(stderr, "-h hostname	hostname (e.g. localhost)\n");
+	fprintf(stderr, "-p portnr	portnumber (e.g. 80)\n");
+	fprintf(stderr, "-c count	how many times to connect\n");
+	fprintf(stderr, "-i interval	delay between each connect\n");
+	fprintf(stderr, "-f		flood connect (no delays)\n");
+	fprintf(stderr, "-q		quiet, only returncode\n\n");
 }
 
 void handler(int sig)
 {
-    stop = 1;
+	stop = 1;
 }
 
 int main(int argc, char *argv[])
 {
-    char *hostname = NULL;
-    char *portnr = "7";
-    int c;
-    int count = -1, curncount = 0;
-    int wait = 1, quiet = 0;
-    int ok = 0, err = 0;
-    double min = 999999999999999.0, avg = 0.0, max = 0.0;
-    struct addrinfo *resolved;
-    int errcode;
-    int seen_addrnotavail;
+	char *hostname = NULL;
+	int portnr = 80;
+	int c;
+	int count = -1, curncount = 0;
+	int wait = 1, quiet = 0;
+	int ok = 0, err = 0;
+	double min = 999999999999999.0, avg = 0.0, max = 0.0;
 
-    while((c = getopt(argc, argv, "h:p:c:i:fq?")) != -1)
-    {
-        switch(c)
+        while((c = getopt(argc, argv, "h:p:c:i:fq?")) != -1)
         {
-            case 'p':
-                portnr = optarg;
-                break;
-
-            case 'c':
-                count = atoi(optarg);
-                break;
-
-            case 'i':
-                wait = atoi(optarg);
-                break;
-
-            case 'f':
-                wait = 0;
-                break;
-
-            case 'q':
-                quiet = 1;
-                break;
-
-            case '?':
-            default:
-                usage();
-                return 0;
-        }
-    }
-
-    if (optind >= argc)
-    {
-        fprintf(stderr, "No hostname given\n");
-        usage();
-        return 3;
-    }
-    hostname = argv[optind];
-
-    signal(SIGINT, handler);
-    signal(SIGTERM, handler);
-
-    if ((errcode = lookup(hostname, portnr, &resolved)) != 0)
-    {
-        fprintf(stderr, "%s\n", gai_strerror(errcode));
-        return 2;
-    }
-
-    if (!quiet)
-        printf("PING %s:%s\n", hostname, portnr);
-
-    while((curncount < count || count == -1) && stop == 0)
-    {
-        double ms;
-        struct timeval rtt;
-
-        if ((errcode = connect_to(resolved, &rtt)) != 0)
-        {
-            if (errcode != -EADDRNOTAVAIL)
-            {
-                printf("error connecting to host (%d): %s\n", -errcode, strerror(-errcode));
-                err++;
-            }
-            else
-            {
-                if (seen_addrnotavail)
+                switch(c)
                 {
-                    printf(".");
-                    fflush(stdout);
-                }
-                else
-                {
-                    printf("error connecting to host (%d): %s\n", -errcode, strerror(-errcode));
-                }
-                seen_addrnotavail = 1;
-            }
-        }
-        else
-        {
-            seen_addrnotavail = 0;
-            ok++;
+		case 'h':
+			hostname = optarg;
+			break;
 
-            ms = ((double)rtt.tv_sec * 1000.0) + ((double)rtt.tv_usec / 1000.0);
-            avg += ms;
-            min = min > ms ? ms : min;
-            max = max < ms ? ms : max;
+		case 'p':
+			portnr = atoi(optarg);
+			break;
 
-            printf("response from %s:%s, seq=%d time=%.2f ms\n", hostname, portnr, curncount, ms);
-            if (ms > 500) break; /* Stop the test on the first long connect() */
-        }
+		case 'c':
+			count = atoi(optarg);
+			break;
 
-        curncount++;
+		case 'i':
+			wait = atoi(optarg);
+			break;
 
-        if (curncount != count)
-            sleep(wait);
-    }
+		case 'f':
+			wait = 0;
+			break;
 
-    if (!quiet)
-    {
-        printf("--- %s:%s ping statistics ---\n", hostname, portnr);
-        printf("%d responses, %d ok, %3.2f%% failed\n", curncount, ok, (((double)err) / abs(((double)count)) * 100.0));
-        printf("round-trip min/avg/max = %.1f/%.1f/%.1f ms\n", min, avg / (double)ok, max);
-    }
+		case 'q':
+			quiet = 1;
+			break;
 
-    freeaddrinfo(resolved);
-    if (ok)
-        return 0;
-    else
-        return 127;
+		case '?':
+		default:
+			usage();
+			return 0;
+		}
+	}
+
+	if (hostname == NULL)
+	{
+		fprintf(stderr, "No hostname given\n");
+		usage();
+		return 3;
+	}
+
+	if (!quiet)
+		printf("PING %s:%d\n", hostname, portnr);
+
+	signal(SIGINT, handler);
+	signal(SIGTERM, handler);
+
+	while((curncount < count || count == -1) && stop == 0)
+	{
+		double ms;
+		double dstart, dend;
+		struct timeval start, end;
+        	struct timezone tz;
+		int fd;
+
+		if (gettimeofday(&start, &tz) == -1)
+		{
+			perror("gettimeofday");
+			break;
+		}
+
+		for(;;)
+		{
+			fd = connect_to(hostname, portnr);
+			if (fd == -1)
+			{
+				printf("error connecting to host: %s\n", strerror(errno));
+				err++;
+				break;
+			}
+
+			ok++;
+
+			close(fd);
+
+			if (gettimeofday(&end, &tz) == -1)
+			{
+				perror("gettimeofday");
+				break;
+			}
+
+			dstart = (((double)start.tv_sec) + ((double)start.tv_usec)/1000000.0);
+			dend = (((double)end.tv_sec) + ((double)end.tv_usec)/1000000.0);
+			ms = (dend - dstart) * 1000.0;
+			avg += ms;
+			min = min > ms ? ms : min;
+			max = max < ms ? ms : max;
+
+			printf("connected to %s:%d, seq=%d time=%.2f ms\n", hostname, portnr, curncount, (dend - dstart) * 1000.0);
+
+			break;
+		}
+
+		curncount++;
+
+		if (curncount != count)
+			sleep(wait);
+	}
+
+	if (!quiet)
+	{
+		printf("--- %s:%d ping statistics ---\n", hostname, portnr);
+		printf("%d connects, %d ok, %3.2f%% failed\n", curncount, ok, (((double)err) / ((double)count)) * 100.0);
+		printf("round-trip min/avg/max = %.1f/%.1f/%.1f ms\n", min, avg / (double)ok, max);
+	}
+
+	if (ok)
+		return 0;
+	else
+		return 127;
 }

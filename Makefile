@@ -1,16 +1,15 @@
-CC=gcc
+LDFLAGS+=
+CFLAGS+=-O3 -Wall
 
-LDFLAGS=
-CFLAGS=-g -Wall -Wextra -pedantic
+VERSION=0.2
 
-VERSION=0.1
-
-OBJS=main.o tcp.o
+OBJS=io.o error.o main.o tcp.o
 
 all: tcping
 
 tcping: $(OBJS)
 	$(CC) $(OBJS) $(LDFLAGS) -o tcping
+	strip tcping
 
 install: tcping
 	cp tcping $(DESTDIR)/usr/bin
