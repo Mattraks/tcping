@@ -1,7 +1,7 @@
 LDFLAGS+=
 CFLAGS+=-O3 -Wall
 
-VERSION=0.2
+VERSION=0.3
 
 OBJS=io.o error.o main.o tcp.o
 
