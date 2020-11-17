@@ -1,7 +1,7 @@
 LDFLAGS+=
 CFLAGS+=-O3 -Wall
 
-VERSION=0.2
+VERSION=0.3
 
 OBJS=io.o error.o main.o tcp.o
 
@@ -9,7 +9,6 @@ all: tcping
 
 tcping: $(OBJS)
 	$(CC) $(OBJS) $(LDFLAGS) -o tcping
-	strip tcping
 
 install: tcping
 	cp tcping $(DESTDIR)/usr/bin
